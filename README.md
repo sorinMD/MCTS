@@ -23,16 +23,16 @@ MCTS configuration options are defined in mcts.json:
 
 Game configuration options are defined in game.json. Configuration specific to Settlers of Catan:
 - type : choosing the config type also selects which game model is used in the search;
-- TRADES : boolean flag for allowing or dissallowing trades between players;
+- TRADES : boolean flag for allowing trades between players;
 - NEGOTIATIONS : boolean flag for allowing the negotiation actions of accept or reject. Should be left to true since false implies players can execute resource exchanges without the acknowledgement of the other participant;
 - ALLOW_COUNTEROFFERS : boolean flag for allowing counter-offer as negotiation response. This will increase the tree size without any benefits as described in the paper; 
 - N_MAX_DISCARD : option for setting the number of resources discarded when a 7 is rolled as a threshold before this action is executed at random instead of the chosen selection policy. The default value of 10, means that the player will discard at random if it has more than 20 resources in its hand when a 7 is rolled. The threshold of 10 was chosen as it is crossed only in the case of a draw, when there is no more space on the board and the players cannot use their resources.
 - EVEN_DISTRIBUTION_OVER_TYPES : boolean flag for the double sampling approach proposed in the paper: first choose an action type, followed by choosing an option of that type;
 - ALLOW_SAMPLING_IN_NORMAL_STATE : boolean flag for sampling from the trade options in the normal state and always presenting a single option, without the extra step of sampling from the other action types. This is a flawed implementation of the type sampling. 
 
-To run the simple benchmarking on the Catan game, run Mcts.java with argument the name of the two configuration files and the number of games (e.g. java -cp mcts.jar mcts.MCTS mcts.json game.json 100). Code to test in agents playing the Settlers of Catan game will be released with the code for the [Strategic Conversation (STAC)] project. 
+To run the simple benchmarking on the Catan game, run the jar that contains the dependencies with arguments the name of the two configuration files and the number of games (e.g. java -cp MCTS-1.0.jar mcts.MCTS mcts.json game.json 100). Code to test as agents playing the Settlers of Catan game will be released with the code for the [Strategic Conversation (STAC)] project. 
 
-*Thanks to Pieter Spronck and Istvan Szita for most of the game model implementation, especially the basic rules and datastructures: Szita, I., Chaslot, G., and Spronck, P. (2010). Monte-carlo tree search in settlers of catan. In van den Herik, H. and Spronck, P., editors, Advances in Computer Games, pages 21–32. Springer.
+*Thanks to Pieter Spronck and Istvan Szita for most of the game model implementation, especially the basic game rules and data structures: Szita, I., Chaslot, G., and Spronck, P. (2010). Monte-carlo tree search in settlers of catan. In van den Herik, H. and Spronck, P., editors, Advances in Computer Games, pages 21–32. Springer.
 
 ** AMAF is not implemented yet. Both PUCT and RAVE are used as methods for managing the amount of prior information
 
