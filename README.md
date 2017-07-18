@@ -5,8 +5,8 @@ Parallel implementation of MCTS code, using tree parallelisation. It is a synchr
 - Mihai Dobre and Alex Lascarides. Exploiting action categories in learning complex games. In IEEE SAI Intelligent Systems Conference (IntelliSys), London, UK, 2017
 
 Game models:
-TicTacToe (3 by 3) as a simple example;
-Settlers of Catan, the fully-observable game, including trades. (extension of the SmartSettlers model*).
+- TicTacToe (3 by 3) as a simple example;
+- Settlers of Catan, the fully-observable game, including trades. (extension of the SmartSettlers model*).
 
 MCTS configuration options are defined in mcts.json:
 - nRollouts : number of rollouts (or iterations);
