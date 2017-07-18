@@ -6,8 +6,8 @@
     </prerequisites>
     
 	<groupId>STAC</groupId>
-	<artifactId>parallelmcts</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<artifactId>MCTS</artifactId>
+	<version>1.0</version>
 
 	<name>ParallelMCTS</name>
     <packaging>jar</packaging>
