@@ -1,0 +1,19 @@
+{
+  "nRollouts" : 10000,
+  "nThreads" : 4,
+  "timeLimit" : 0,
+  "treeSize" : 500000,
+  "afterstates" : true,
+  "trigger" : {
+    "type" : "mcts.seeder.NullSeedTrigger",
+    "maxSeederCount" : 1
+  },
+  "selectionPolicy" : {
+    "type" : "mcts.tree.selection.UCT",
+    "MINVISITS" : 1,
+    "C0" : 1.0
+  },
+  "updatePolicy" : {
+    "type" : "mcts.tree.update.StateUpdater"
+  }
+}

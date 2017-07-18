@@ -1,0 +1,10 @@
+{
+  "type" : "mcts.game.catan.CatanConfig",
+  "id" : 1,
+  "TRADES" : true,
+  "NEGOTIATIONS" : true,
+  "ALLOW_COUNTEROFFERS" : false,
+  "N_MAX_DISCARD" : 10,
+  "EVEN_DISTRIBUTION_OVER_TYPES" : true,
+  "ALLOW_SAMPLING_IN_NORMAL_STATE" : false
+}
