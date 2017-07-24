@@ -30,7 +30,16 @@ Game configuration options are defined in game.json. Configuration specific to S
 - EVEN_DISTRIBUTION_OVER_TYPES : boolean flag for the double sampling approach proposed in the paper: first choose an action type, followed by choosing an option of that type;
 - ALLOW_SAMPLING_IN_NORMAL_STATE : boolean flag for sampling from the trade options in the normal state and always presenting a single option, without the extra step of sampling from the other action types. This is a flawed implementation of the type sampling. 
 
-To run the simple benchmarking on the Catan game, run the jar that contains the dependencies with arguments the name of the two configuration files and the number of games (e.g. java -cp MCTS-1.0.jar mcts.MCTS mcts.json game.json 100). Code to test as agents playing the Settlers of Catan game will be released with the code for the [Strategic Conversation (STAC)] project. 
+To run the simple benchmarking on the Catan game, run the jar that contains the dependencies with arguments the name of the two configuration files and the number of games (e.g. java -cp MCTS-1.0.jar mcts.MCTS mcts.json game.json 100). The following table contains the performance in ms on machines with Intel Xeon quadcore CPUs at 3GHz frequency and 4Gb RAM:
+
+| Rollouts/Threads | 1     | 4    | 8    | 16   | 
+| ---------------- |:-----:|:----:|:----:|:----:|
+| 10k              | 5252  | 1488 | 888  | 600  |
+| 30k              | 23021 | 4509 | 2980 | 2266 |
+| 40k              | 30289 | 5941 | 4145 | 2623 |
+| 50k              | 31736 | 7599 | 5094 | 3438 |
+
+Code to test as agents playing the Settlers of Catan game will be released with the code for the [Strategic Conversation (STAC)] project. 
 
 *Thanks to Pieter Spronck and Istvan Szita for most of the game model implementation, especially the basic game rules and data structures: Szita, I., Chaslot, G., and Spronck, P. (2010). Monte-carlo tree search in settlers of catan. In van den Herik, H. and Spronck, P., editors, Advances in Computer Games, pages 21–32. Springer.
 
