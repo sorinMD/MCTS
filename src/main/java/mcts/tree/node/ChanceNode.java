@@ -13,8 +13,8 @@ package mcts.tree.node;
  */
 public class ChanceNode extends TreeNode {
 
-	public ChanceNode(int[] state, boolean terminal, int cpn) {
-		super(state, terminal, cpn);
+	public ChanceNode(int[] state, int[] belief, boolean terminal, int cpn) {
+		super(state, belief, terminal, cpn);
 		// always use the tree policy to select the action if it is not terminal
 		// as these nodes are treated as special cases in the tree policy logic
 		setLeaf(false);

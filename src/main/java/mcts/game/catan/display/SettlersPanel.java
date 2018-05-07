@@ -10,6 +10,7 @@ import java.awt.*;
 import java.awt.geom.*;
 import java.lang.Math;
 
+import mcts.game.Game;
 import mcts.game.catan.Board;
 import mcts.game.catan.Catan;
 import mcts.game.catan.Edge;
@@ -27,7 +28,7 @@ public class SettlersPanel extends javax.swing.JPanel
         implements VectorConstants, HexTypeConstants, GameStateConstants 
 {
     
-    Catan boardlayout;
+    Game boardlayout;
     double A[][] = {{1, 0}, {0.5, -0.86602540378443864676372317075294}};
     double offset[] = {-0.5, 6.5};
     double scale = 20;
@@ -70,7 +71,7 @@ public class SettlersPanel extends javax.swing.JPanel
         Catan.setBoardSize(w, h, scale);
     }
     
-    public void SetBoardLayout(Catan boardlayout)
+    public void SetBoardLayout(Game boardlayout)
     {
         this.boardlayout = boardlayout;
     }
@@ -179,7 +180,7 @@ public class SettlersPanel extends javax.swing.JPanel
 
     void DrawVertex(Graphics2D g2, int i)
     {
-        Vertex v = boardlayout.board.vertices[i];
+        Vertex v = Catan.board.vertices[i];
         Stroke oldstroke = g2.getStroke();
         int vstate;
         int W;
@@ -232,7 +233,7 @@ public class SettlersPanel extends javax.swing.JPanel
 
     void DrawEdge(Graphics2D g2, int i)
     {
-        Edge e = boardlayout.board.edges[i];
+        Edge e = Catan.board.edges[i];
         Stroke oldstroke = g2.getStroke();
         int estate;
         int W;
@@ -282,17 +283,17 @@ public class SettlersPanel extends javax.swing.JPanel
        Graphics2D g2 = (Graphics2D)g;
        int i;
         
-        for (i=0; i<boardlayout.board.hextiles.length; i++)
+        for (i=0; i<Catan.board.hextiles.length; i++)
         {
-            DrawHexTile(g2,boardlayout.board.hextiles[i]);
+            DrawHexTile(g2,Catan.board.hextiles[i]);
         }
         
-        for (i=0; i<boardlayout.board.edges.length; i++)
+        for (i=0; i<Catan.board.edges.length; i++)
         {
             DrawEdge(g2,i);
         }
         
-        for (i=0; i<boardlayout.board.vertices.length; i++)
+        for (i=0; i<Catan.board.vertices.length; i++)
         {
             DrawVertex(g2,i);
         }
@@ -327,7 +328,7 @@ public class SettlersPanel extends javax.swing.JPanel
         if (boardlayout.getState()[OFS_ROBBERPLACE] != -1)
         {
             g2.setColor(Color.BLACK);
-            HexTile h = boardlayout.board.hextiles[boardlayout.getState()[OFS_ROBBERPLACE]];
+            HexTile h = Catan.board.hextiles[boardlayout.getState()[OFS_ROBBERPLACE]];
             g2.fillOval(h.centerScreenCord.x, h.centerScreenCord.y, 15, 15);
         }
     }
@@ -458,9 +459,9 @@ public class SettlersPanel extends javax.swing.JPanel
     int findHexAtPoint(Point p)
     {
         int i;
-        for (i=0; i<boardlayout.board.hextiles.length; i++)
+        for (i=0; i<Catan.board.hextiles.length; i++)
         {
-            if (boardlayout.board.hextiles[i].screenCoord.contains(p))
+            if (Catan.board.hextiles[i].screenCoord.contains(p))
             {
                 return i;
             }
@@ -479,7 +480,7 @@ public class SettlersPanel extends javax.swing.JPanel
         if (prevObjUnderMouse == OBJ_HEX)
         {
             DrawBoard(g); //!!!! overshoot
-            DrawHexTile(g,boardlayout.board.hextiles[prevObjIndUnderMouse]);
+            DrawHexTile(g,Catan.board.hextiles[prevObjIndUnderMouse]);
         }
         
         if (objUnderMouse == OBJ_HEX)
@@ -487,9 +488,9 @@ public class SettlersPanel extends javax.swing.JPanel
             Color c = new Color(255, 255, 255, 100);
             
             g.setColor(c);
-            g.fillPolygon(boardlayout.board.hextiles[objIndUnderMouse].screenCoord);
+            g.fillPolygon(Catan.board.hextiles[objIndUnderMouse].screenCoord);
             g.setColor(Color.RED);
-            g.drawPolygon(boardlayout.board.hextiles[objIndUnderMouse].screenCoord);
+            g.drawPolygon(Catan.board.hextiles[objIndUnderMouse].screenCoord);
         }
         
     }

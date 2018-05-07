@@ -1,13 +1,10 @@
 package mcts.game.tictactoe;
 
-import java.util.ArrayList;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
-
 import mcts.game.Game;
 import mcts.tree.node.StandardNode;
 import mcts.tree.node.TreeNode;
-import mcts.tree.node.ChanceNode;
+import mcts.utils.Options;
 
 /**
  * Simple example game for testing the MCTS algorithm
@@ -68,7 +65,7 @@ public class TicTacToe implements Game{
 		return true;
 	}
 	
-	public void performAction(int[] action){
+	public void performAction(int[] action, boolean sample){
 		if(state[1] == CROSS){
 			state[action[0]] = CROSS;
 			state[1] = NOUGHT;//update turn
@@ -102,14 +99,14 @@ public class TicTacToe implements Game{
 			return true;
 		return false;
 	}
-	
-	public ArrayList<int[]> listPossiblities(boolean quick){
-		ArrayList<int[]> list = new ArrayList<>();
+
+	public Options listPossiblities(boolean quick){
+		Options list = new Options();
 		for(int i = 2; i < state.length; i++){
 			if(state[i] == EMPTY){
 				int[] action = new int[1]; //all actions description are of length 1 for this game
 				action[0] = i;
-				list.add(action);
+				list.put(action, 1.0);
 			}
 		}
 		return list;
@@ -134,19 +131,25 @@ public class TicTacToe implements Game{
 	@Override
 	public int[] sampleNextAction() {
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		ArrayList<int[]> options = listPossiblities(true);
-		return options.get(rnd.nextInt(options.size()));
+		Options options = listPossiblities(true);
+		return options.getOptions().get(rnd.nextInt(options.size()));
 	}
 	
 	@Override
 	public int sampleNextActionIndex() {
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		ArrayList<int[]> options = listPossiblities(true);
+		Options options = listPossiblities(true);
 		return rnd.nextInt(options.size());
 	}
 
 	@Override
 	public TreeNode generateNode() {
-		return new StandardNode(getState(), isTerminal(), getCurrentPlayer());
+		return new StandardNode(getState(), null, isTerminal(), getCurrentPlayer());
+	}
+
+	@Override
+	public void gameTick() {
+		int[] action = sampleNextAction();
+		performAction(action, true);
 	}
 }

@@ -9,6 +9,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 
 import mcts.MCTS;
+import mcts.game.GameFactory;
+import mcts.seeder.pdf.CatanTypePDFSeedTrigger;
 import mcts.tree.node.TreeNode;
 
 /**
@@ -24,6 +26,7 @@ include = JsonTypeInfo.As.PROPERTY,
 property = "type")
 @JsonSubTypes({
 	@Type(value = NullSeedTrigger.class),
+	@Type(value = CatanTypePDFSeedTrigger.class)
 })
 public abstract class SeedTrigger {
 	@JsonIgnore
@@ -41,7 +44,7 @@ public abstract class SeedTrigger {
 	 * Add a new node to the queue, and possibly start the evaluation thread
 	 * @param node
 	 */
-	public abstract void addNode(TreeNode node);
+	public abstract void addNode(TreeNode node, GameFactory factory);
 	
 	/**
 	 * e.g. clears queue(s), resets counters etc
@@ -55,5 +58,10 @@ public abstract class SeedTrigger {
 	public void init(MCTS mcts){
 		this.mcts = mcts;
 		initialised = true;
+	}
+	
+	@Override
+	public String toString() {
+		return "[name-" + this.getClass().getName() + "; maxSeederCount-" + maxSeederCount + "]";
 	}
 }

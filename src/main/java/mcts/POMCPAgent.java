@@ -1,7 +1,6 @@
 package mcts;
 
 import java.util.ArrayList;
-
 import mcts.game.DeterminizationSampler;
 import mcts.game.Game;
 import mcts.game.GameFactory;
@@ -9,53 +8,57 @@ import mcts.listeners.SearchListener;
 import mcts.tree.ExpansionPolicy;
 import mcts.tree.SimulationPolicy;
 import mcts.tree.Tree;
-import mcts.tree.node.ChanceNode;
 import mcts.tree.node.TreeNode;
-import mcts.utils.Selection;
 import mcts.utils.GameSample;
 import mcts.utils.Priority;
 import mcts.utils.PriorityRunnable;
+import mcts.utils.Selection;
 
-/**
- * Performs one pass through the four stages of the Monte Carlo Tree Search algorithm.
- * @author sorinMD
- *
- */
-public class MCTSAgent implements Runnable,PriorityRunnable{
+public class POMCPAgent implements Runnable,PriorityRunnable{
 	private Tree tree;
 	private SearchListener listener;
 	private MCTSConfig config;
 	private GameFactory gameFactory;
 	private static Priority priority = Priority.LOW;
 	
-	public MCTSAgent(Tree tree, SearchListener listener, MCTSConfig config,  GameFactory gameFactory) {
+	public POMCPAgent(Tree tree, SearchListener listener, MCTSConfig config,  GameFactory gameFactory) {
 		this.tree = tree;
 		this.listener = listener;
 		this.gameFactory = gameFactory;
 		this.config = config;
 	}
-	
 	@Override
 	public void run() {
 		try {
 			GameFactory factory = gameFactory.copy();
 			ArrayList<Selection> visited = new ArrayList<Selection>();
 			TreeNode node = tree.getRoot();
-			//placeholder: there aren't any nodes to visit before root
 			Selection selection = new Selection(false, node, 1.0);
 			visited.add(selection); 
 			
+			/*
+			 * Sample one state that is followed through the algorithm to provide observations for POMCP
+			 * NOTE: that the sampler may return null if there is no belief and pomcp flag doesn't make a difference.
+			 */
+			Game obsGame = null;
+			DeterminizationSampler sampler = factory.getDeterminizationSampler();
+			GameSample sample = sampler.sampleObservableState(factory.getGame(node.getState()), factory);
+			obsGame = sample.getGame();
+			
 			boolean allSiblingsVisited = true; //ensures the first expansion of the tree node is performed
 			int depth = 1;
+			
 			while(!node.isLeaf() && !node.isTerminal()){
-				selection = config.selectionPolicy.selectChild(node, tree, factory, null);
+				selection = config.selectionPolicy.selectChild(node, tree, factory, obsGame);
 				node = selection.getNode();
 				allSiblingsVisited = selection.getBoolean();
-				visited.add(selection);
+				visited.add(selection);			
+				if(obsGame.isTerminal())
+					break;//in pomcp, the observable game chooses the outcome, we could rely on the following chance node but there is no point in doing one more selection if we already know the outcome.
 				if(!allSiblingsVisited)
 					break; //do not select further, still gathering statistics on siblings
-				if(depth > config.maxTreeDepth) //reached max tree depth or stuck in one of the game's cycles.
-					break;
+				if(depth > config.maxTreeDepth) 
+					break; //reached max tree depth or stuck in one of the game's cycles.
 				depth++;	
 			}
 			
@@ -67,38 +70,27 @@ public class MCTSAgent implements Runnable,PriorityRunnable{
 			 * -max tree size was not reached.
 			 */
 			if(!node.isTerminal() && node.canExpand() && allSiblingsVisited && !tree.maxSizeReached() && node.isLeaf()){
-				selection = ExpansionPolicy.expand(tree, node, config.trigger, factory, null, config.nRootActProbSmoothing);
-				visited.add(selection);
-				node = selection.getNode();
+				if(!obsGame.isTerminal()) {
+					selection = ExpansionPolicy.expand(tree, node, config.trigger, factory, obsGame, config.nRootActProbSmoothing);
+					visited.add(selection);
+					node = selection.getNode();
+				}
 			}
 			
-			Game game = factory.getGame(node.getState());
-			DeterminizationSampler sampler = factory.getDeterminizationSampler();
-			GameSample sample = null;
+			//rollouts are always observable in POMCP since we follow one fully-observable state at random
+			Game game = obsGame;
+			factory = new GameFactory(factory.getConfig(), null);
+			
 			double[] wins = new double[GameFactory.nMaxPlayers()];
 			//TODO: these rollouts could also be parallelised if multiple
 			for (int i=0; i < config.nRolloutsPerIteration; i++) {
 				Game gameClone = game.copy();
-				if(config.observableRollouts && factory.getBelief() != null) {
-					//chance nodes may be different between a fully-observable state and a belief so execute them before sampling
-					while(node instanceof ChanceNode && !gameClone.isTerminal()) {
-						gameClone.gameTick();
-						node = gameClone.generateNode();
-					}
-					if(!gameClone.isTerminal()) {
-						sample = sampler.sampleObservableState(gameClone, factory);
-						gameClone = sample.getGame();
-					}
-				}
 				gameClone = SimulationPolicy.simulate(gameClone);
 				if(gameClone.getWinner() != -1) {
-					if(config.observableRollouts && config.weightedReturn) {
-						double prob = 1.0;
-						if(sample != null)//non-terminal leaf node case, otherwise all states in the belief are terminal.
-							prob = sample.getProb();
-						if(config.nRootStateProbSmoothing > 1) {
+					if(config.weightedReturn) {
+						double prob = sample.getProb();
+						if(config.nRootStateProbSmoothing > 1)
 							prob = Math.pow(prob, 1.0/config.nRootStateProbSmoothing);
-						}
 						wins[gameClone.getWinner()] += prob;
 					}else
 						wins[gameClone.getWinner()] += 1.0;

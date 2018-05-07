@@ -11,43 +11,54 @@ public class Timer {
 
     private static final String DEFAULT_TIMER_NAME = ".~DEFAULT_TIMER~.";
     private final Map<String, Long> timerMap = new HashMap<>();
+    
+    private String name;
+    private boolean pause = false;
+    private long pauseTime = 0;
 
     public Timer() {
-        reset(DEFAULT_TIMER_NAME);
+    	name = DEFAULT_TIMER_NAME;
+        reset(name);
     }
-
+    
+    public Timer(String name) {
+        reset(name);
+    }
+    
     public long elapsed() {
-        return elapsed(DEFAULT_TIMER_NAME);
+        return elapsed(name);
     }
 
     public void reset() {
-        reset(DEFAULT_TIMER_NAME);
-    }
-
-    public void reset(String name) {
-        timerMap.put(name, System.nanoTime());
-    }
-
-    public void start() {
-        reset(DEFAULT_TIMER_NAME);
-    }
-
-    public void start(String name) {
         reset(name);
     }
 
-    public long elapsed(String name) {
-        return System.nanoTime() - timerMap.get(name);
+    private void reset(String name) {
+        timerMap.put(name, System.nanoTime());
+    }
+
+    private long elapsed(String name) {
+    	if(pause)
+    		return pauseTime - timerMap.get(name); 
+    	else
+    		return System.nanoTime() - timerMap.get(name);
     }
 
     public String toString() {
-        return toString(DEFAULT_TIMER_NAME);
+        return name + ": " + elapsed(name) + " ns elapsed";
     }
 
-    public String toString(String name) {
-        return elapsed(name) + " ns elapsed";
+    public void pause(){
+    	pause = true;
+    	pauseTime = System.nanoTime();
     }
-
+    
+    public void unpause(){
+    	pause = false;
+    	timerMap.put(name, timerMap.get(name) + (System.nanoTime() - pauseTime));
+    	pauseTime = 0;
+    }
+    
     public static void main(String[] args) {
         Timer t = new Timer();
         System.out.println("ns elasped: " + t.elapsed());

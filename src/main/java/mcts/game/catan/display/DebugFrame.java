@@ -6,6 +6,8 @@
 
 package mcts.game.catan.display;
 
+import mcts.game.Game;
+import mcts.game.GameFactory;
 import mcts.game.catan.Catan;
 import mcts.game.catan.CatanConfig;
 
@@ -15,15 +17,17 @@ import mcts.game.catan.CatanConfig;
  */
 public class DebugFrame extends javax.swing.JFrame {
 
-    public Catan boardlayout;
+	public GameFactory gameFactory;
+    public Game boardlayout;
     
     /** Creates new form DebugFrame */
     public DebugFrame() {
         initComponents();
         
         settlersPanel1.setBoardLayoutSize();
+        gameFactory = new GameFactory(new CatanConfig(), null);
         Catan.initBoard();
-        boardlayout = new Catan(new CatanConfig());//new BoardLayout(settlersPanel1.getWidth(),settlersPanel1.getHeight());
+        boardlayout = gameFactory.getNewGame();//new BoardLayout(settlersPanel1.getWidth(),settlersPanel1.getHeight());
         settlersPanel1.SetBoardLayout(boardlayout);
     }
     
@@ -74,7 +78,7 @@ public class DebugFrame extends javax.swing.JFrame {
     private SettlersPanel settlersPanel1;
     // End of variables declaration//GEN-END:variables
  
-    public void setbl(Catan bl){
+    public void setbl(Game bl){
     	boardlayout = bl;
     	settlersPanel1.SetBoardLayout(bl);
     }

@@ -3,23 +3,28 @@ package mcts.game.catan;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
 
 import mcts.game.Game;
+import mcts.game.catan.typepdf.HumanActionTypePdf;
 import mcts.tree.node.StandardNode;
 import mcts.tree.node.TreeNode;
+import mcts.utils.Options;
+import mcts.utils.Timer;
 import mcts.tree.node.ChanceNode;
 
 /**
- * Settlers of Catan game model implementation.
+ * Fast fully-observable Settlers of Catan game model implementation.
  * 
  * Part of the state representation and logic courtesy of Pieter Spronck:
  * http://www.spronck.net/research.html
  * 
  * Several improvements and additions have been made:
  * <ul>
- * <li>Added listing the discard action (if the option set is not too large)
+ * <li>Added planning for the discard action instead of random decision (if the legal set is not too large)
  * </li>
  * <li>Added trades (with options for simultaneous actions or negotiations,
  * including counter-offer or not)</li>
@@ -33,16 +38,13 @@ import mcts.tree.node.ChanceNode;
  * development card can be played even if a single road can be built etc )</li>
  * </ul>
  * 
- * TODO: add the code for handling of imperfect information, i.e. player hands.
- * 
  * @author sorinMD
  *
  */
 public class Catan implements Game, GameStateConstants {
 
-	private CatanConfig config;	
-    
-    private int[] state;
+	protected CatanConfig config;	
+    protected int[] state;
 	
 	public static long breadth = 0;
 	public static long depth = 0;
@@ -61,10 +63,15 @@ public class Catan implements Game, GameStateConstants {
 	
 	/**
 	 * Contains all the info that doesn't change during a game, hence it is shared between all instances
-	 * TODO: this is fine for a single local game, but it will be problematic to have it static on the server side.
+	 * TODO: this is fine for a single local game, but it will be problematic to have it static on the server side if multiple games are run in parallel.
 	 */
 	public static Board board = new Board();
 
+	/**
+	 * Stub constructor to allow for a simple extension by {@link CatanWithBelief}
+	 * Note: the child class should do all the initialisation
+	 */
+	protected Catan() {}
 	/**
 	 * A new game object with the provided state, but assumes an existing board.
 	 * To initialise the board call {@link #initBoard()}
@@ -135,8 +142,6 @@ public class Catan implements Game, GameStateConstants {
 	        	cardSequence[idx] = remainingCards[i];
 	        	idx++;
 	        }
-	        if(nDrawnCards != state[OFS_NCARDSGONE])
-	        	System.err.println("Drawn cards are not equal to the n cards gone pointer: " + nDrawnCards + "  " + state[OFS_NCARDSGONE]);
 		}else if(state[OFS_NCARDSGONE] == 0){
 			shuffleArray(cardSequence);
 			state[OFS_DEVCARDS_LEFT + CARD_KNIGHT] = 14;
@@ -183,13 +188,11 @@ public class Catan implements Game, GameStateConstants {
 
 	@Override
 	public int getWinner() {
-		int pl;
-		int retval = -1;
-		for (pl = 0; pl < NPLAYERS; pl++) {
-			if (state[OFS_PLAYERDATA[pl] + OFS_SCORE] >= 10)
-				retval = pl;
-		}
-		return retval;
+		//only current player can win
+		int pl = getCurrentPlayer();
+		if (state[OFS_PLAYERDATA[pl] + OFS_SCORE] >= 10)
+				return pl;
+		return -1;
 	}
 
 	@Override
@@ -205,7 +208,7 @@ public class Catan implements Game, GameStateConstants {
 	}
 
 	@Override
-	public void performAction(int[] a) {
+	public void performAction(int[] a, boolean sample) {
         int fsmlevel    = state[OFS_FSMLEVEL];
         int fsmstate    = state[OFS_FSMSTATE+fsmlevel];
         int pl          = state[OFS_FSMPLAYER+fsmlevel];
@@ -312,6 +315,7 @@ public class Catan implements Game, GameStateConstants {
 					}
 				}
 			}
+			state[OFS_DICE] = val;
 			state[OFS_NATURE_MOVE] = 0;
 			break;
 		case A_ENDTURN:
@@ -329,7 +333,7 @@ public class Catan implements Game, GameStateConstants {
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + a[4]] += a[3];
             break;
         case A_BUYCARD:
-        	state[OFS_NATURE_MOVE] = 1;//dealing a card is a non-deterministic action that always following this one
+        	state[OFS_NATURE_MOVE] = 1;//dealing a card is a non-deterministic action that always follows this one
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + RES_WHEAT]--;
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + RES_SHEEP]--;                    
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + RES_STONE]--;
@@ -369,14 +373,23 @@ public class Catan implements Game, GameStateConstants {
             state[OFS_PLAYERDATA[pl] + OFS_HASPLAYEDCARD] = 1;
             state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_MONOPOLY]--;
             state[OFS_PLAYERDATA[pl] + OFS_USEDCARDS + CARD_MONOPOLY]++;
+			state[OFS_MONO_RSS_CHOICE] = a[1];
+			state[OFS_NATURE_MOVE] = 1; //a fake chance node required to synchronise with the belief version of the game
+            break;
+            
+        case A_CHOOSE_MONO_TOTALS:
+        	int choice = state[OFS_MONO_RSS_CHOICE];
             for (ind = 0; ind<NPLAYERS; ind++)
             {
                 if (ind==pl)
                     continue;
-                state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + a[1]] += state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + a[1]];                    
-                state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + a[1]] = 0;
+                state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + choice] += state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + choice];                    
+                state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + choice] = 0;
             }
-            break;
+			//resetting the choice. Even if default is equal to sheep, we use nature move offset and state transition to guide the state flow
+			state[OFS_MONO_RSS_CHOICE] = 0;
+			state[OFS_NATURE_MOVE] = 0;
+        	break;
         case A_PLAYCARD_FREEROAD:
             state[OFS_PLAYERDATA[pl] + OFS_HASPLAYEDCARD] = 1;
             state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_FREEROAD]--;
@@ -389,13 +402,7 @@ public class Catan implements Game, GameStateConstants {
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + a[1]] ++;
             state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + a[2]] ++;
             break;
-		case A_PAYTAX_RANDOM:
-			for (i = 0; i < a[1]; i++) {
-				ind = selectRandomResourceInHand(pl);
-				state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + ind]--;
-			}
-			break;
-		case A_PAYTAX_SPECIFIED:
+		case A_PAYTAX:
 			//the discard resources are specified (both types and amounts)
 			for (i = 0; i < NRESOURCES; i++) {
 				state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i] -= a[i + 1];
@@ -463,7 +470,7 @@ public class Catan implements Game, GameStateConstants {
 	}
 
 	@Override
-	public ArrayList<int[]> listPossiblities(boolean sample) {
+	public Options listPossiblities(boolean sample) {
 		int fsmlevel = state[OFS_FSMLEVEL];
 		int fsmstate = state[OFS_FSMSTATE + fsmlevel];
 		int pl = state[OFS_FSMPLAYER + fsmlevel];
@@ -506,8 +513,12 @@ public class Catan implements Game, GameStateConstants {
 		case S_NEGOTIATIONS:
 			listTradeResponsePossiblities(options);
 			break;
+		case S_MONOPOLY_EFFECT:
+			listMonopolyTotals(options);
+			break;
 		}
-		return options;
+		Options opts = new Options(options, null);
+		return opts;
 	}
 	
 	@Override
@@ -521,14 +532,14 @@ public class Catan implements Game, GameStateConstants {
 				val += state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i];
 			val = val / 2;
 			if(val <= config.N_MAX_DISCARD)
-				return new StandardNode(getState(), isTerminal(), getCurrentPlayer());
+				return new StandardNode(getState(), null, isTerminal(), getCurrentPlayer());
 			else
-				return new ChanceNode(getState(), isTerminal(), getCurrentPlayer());
+				return new ChanceNode(getState(), null, isTerminal(), getCurrentPlayer());
 		}
 		if(state[OFS_NATURE_MOVE] == 0)
-			return new StandardNode(getState(), isTerminal(), getCurrentPlayer());
+			return new StandardNode(getState(), null, isTerminal(), getCurrentPlayer());
 		else
-			return new ChanceNode(getState(), isTerminal(), getCurrentPlayer());
+			return new ChanceNode(getState(), null, isTerminal(), getCurrentPlayer());
 	}
 
 	@Override
@@ -542,19 +553,26 @@ public class Catan implements Game, GameStateConstants {
         int fsmlevel    = state[OFS_FSMLEVEL];
         int fsmstate    = state[OFS_FSMSTATE+fsmlevel];
         int val = -1;
-        ArrayList<int[]> options = listPossiblities(true);
-        if(state[OFS_NATURE_MOVE] != 1 && options.size() >1){
+        Options opts = listPossiblities(true);
+        ArrayList<int[]> options = opts.getOptions();
+        
+        if(/*state[OFS_NATURE_MOVE] != 1 &&*/ options.size() >1){
         	depth ++;
         	breadth += options.size();
         }
+        
 		if(state[OFS_NATURE_MOVE] == 1){
 			if(fsmstate == S_DICE_RESULT){
-				state[OFS_DICE] = rnd.nextInt(6) + rnd.nextInt(6) + 2;
-				val = state[OFS_DICE];
+				val = rnd.nextInt(6) + rnd.nextInt(6) + 2;
+				return Actions.newAction(A_CHOOSE_DICE, val);
 			}else if(fsmstate == S_STEALING){
 				val = selectRandomResourceInHand(state[OFS_VICTIM]);
+				return Actions.newAction(A_CHOOSE_RESOURCE, val);
 			}else if(fsmstate == S_BUYCARD){
 				val = cardSequence[state[OFS_NCARDSGONE]];
+				return Actions.newAction(A_DEAL_DEVCARD, val);
+			}else if(fsmstate == S_MONOPOLY_EFFECT) {
+				return opts.getOptions().get(0);//fake chance node, there should be a single option
 			}
 		}else{
 			return options.get(rnd.nextInt(options.size()));
@@ -566,7 +584,7 @@ public class Catan implements Game, GameStateConstants {
 					return options.get(i);
 			}
 		}
-		System.err.println("Couldn't find option in the list");
+		System.err.println("Couldn't find option in the list when sampling next action ");
 		return options.get(rnd.nextInt(options.size()));
 	}
 	
@@ -576,15 +594,17 @@ public class Catan implements Game, GameStateConstants {
         int fsmlevel    = state[OFS_FSMLEVEL];
         int fsmstate    = state[OFS_FSMSTATE+fsmlevel];
         int val = -1;
-        ArrayList<int[]> options = listPossiblities(true);
+        Options opts = listPossiblities(true);
+        ArrayList<int[]> options = opts.getOptions();
 		if(state[OFS_NATURE_MOVE] == 1){
 			if(fsmstate == S_DICE_RESULT){
-				state[OFS_DICE] = rnd.nextInt(6) + rnd.nextInt(6) + 2;
-				val = state[OFS_DICE];
+				val = rnd.nextInt(6) + rnd.nextInt(6) + 2;
 			}else if(fsmstate == S_STEALING){
 				val = selectRandomResourceInHand(state[OFS_VICTIM]);
 			}else if(fsmstate == S_BUYCARD){
 				val = cardSequence[state[OFS_NCARDSGONE]];
+			}else if(fsmstate == S_MONOPOLY_EFFECT) {
+				return 0;//fake chance node, there should be a single option
 			}
 		}else{
 			return rnd.nextInt(options.size());
@@ -596,7 +616,7 @@ public class Catan implements Game, GameStateConstants {
 					return i;
 			}
 		}
-		System.err.println("Couldn't find option in the list");
+		System.err.println("Couldn't find option in the list when sampling next index");
 		return rnd.nextInt(options.size());
 	}
 
@@ -683,19 +703,20 @@ public class Catan implements Game, GameStateConstants {
 			}
 			break;
 		case S_BEFOREDICE:
-			if (a[0] == A_THROWDICE)
+			if (a[0] == A_THROWDICE) {
 				state[OFS_FSMSTATE + fsmlevel] = S_DICE_RESULT;
-			else if((a[0] == A_PLAYCARD_KNIGHT) && a[2] != -1){
+			}else if((a[0] == A_PLAYCARD_KNIGHT) && a[2] != -1){
 				fsmlevel++;
 				state[OFS_FSMLEVEL] = fsmlevel;
 				state[OFS_FSMSTATE + fsmlevel] = S_STEALING;
+				state[OFS_FSMPLAYER + fsmlevel] = pl;
 			}//if no victim is specified, the player still needs to roll
 			break;
 		case S_DICE_RESULT:
 			if ((a[0] == A_CHOOSE_DICE) && (state[OFS_DICE] != 7)) {
 				state[OFS_FSMSTATE + fsmlevel] = S_NORMAL;
 			} else if ((a[0] == A_CHOOSE_DICE) && (state[OFS_DICE] == 7)) {
-				//always start from the current player and finish at the current player; TODO: should make this a simultaneous action
+				//always start from the current player and finish at the current player; 
 				state[OFS_DISCARD_FIRST_PL] = pl;
 				int val = 0;
 				for (int i = 0; i < NRESOURCES; i++)
@@ -730,6 +751,7 @@ public class Catan implements Game, GameStateConstants {
 					fsmlevel++;
 					state[OFS_FSMLEVEL] = fsmlevel;
 					state[OFS_FSMSTATE + fsmlevel] = S_ROBBERAT7;
+					state[OFS_FSMPLAYER + fsmlevel] = pl;
 				}
 			}
 			break;
@@ -778,10 +800,16 @@ public class Catan implements Game, GameStateConstants {
 			break;
 		case S_NORMAL:
 			switch (a[0]) {
+			case A_PLAYCARD_MONOPOLY:
+				if(state[OFS_NATURE_MOVE] == 1) {
+					state[OFS_FSMSTATE + fsmlevel] = S_MONOPOLY_EFFECT;
+				}
+				break;
 			case A_PLAYCARD_KNIGHT:
 				if(a[2] != -1){
 					fsmlevel++;
 					state[OFS_FSMLEVEL] = fsmlevel;
+					state[OFS_FSMPLAYER + fsmlevel] = pl;
 					state[OFS_FSMSTATE + fsmlevel] = S_STEALING;
 				}
 				break;
@@ -839,13 +867,16 @@ public class Catan implements Game, GameStateConstants {
 				break;
 			}
 			break;
-
+		case S_MONOPOLY_EFFECT:
+			state[OFS_FSMSTATE + fsmlevel] = S_NORMAL;
+			break;
 		}
+		
 		recalcScores();
-		if (getWinner() != -1) {
+		//do not allow winning in the stealing chance event so the state transition will be synced with the belief version of the game
+		if (getWinner() != -1 && state[OFS_FSMSTATE + fsmlevel] != S_STEALING) { 
 			state[OFS_FSMSTATE + fsmlevel] = S_FINISHED;
 		}
-//		System.out.println(Arrays.toString(state));
 	}
 
 	//private listing actions methods//
@@ -886,7 +917,7 @@ public class Catan implements Game, GameStateConstants {
 	
 	private void listNormalPossibilities(ArrayList<int[]> options, boolean sample){
 		
-		if(sample && config.EVEN_DISTRIBUTION_OVER_TYPES){
+		if(sample && config.SAMPLE_FROM_DISTRIBUTION_OVER_TYPES_IN_ROLLOUTS){
 			listNormalPossAndSampleType(options);
 			return;
 		}
@@ -985,8 +1016,28 @@ public class Catan implements Game, GameStateConstants {
 					actionTypes.add(A_PLAYCARD_FREEROAD);
 			}
 		}
+		
 		ThreadLocalRandom rnd = ThreadLocalRandom.current();
-		int chosenType = actionTypes.get(rnd.nextInt(actionTypes.size()));
+		int chosenType = A_ENDTURN;
+		if(config.rolloutTypeDist instanceof HumanActionTypePdf) {
+			Map<Integer,Double> dist = config.rolloutTypeDist.getDist(actionTypes);
+			double totalWeight = 0.0;
+			for (Entry<Integer,Double> e : dist.entrySet()){
+			    totalWeight += e.getValue();
+			}
+			double random = rnd.nextDouble() * totalWeight;
+			for (Entry<Integer,Double> e : dist.entrySet()){
+				random -= e.getValue();
+			    if (random <= 0.0) {
+			        chosenType = e.getKey();
+			        break;
+			    }
+			}
+		}else {
+			//the alternative is uniform, so no need to do weighted random sampling
+			chosenType = actionTypes.get(rnd.nextInt(actionTypes.size()));
+		}
+		
 		switch (chosenType) {
 		case A_ENDTURN:
 			options.add(Actions.newAction(A_ENDTURN));
@@ -1023,6 +1074,82 @@ public class Catan implements Game, GameStateConstants {
 			break;
 		}
 	}
+	
+	public ArrayList<Integer> listNormalActionTypes(){
+		int fsmlevel    = state[OFS_FSMLEVEL];
+        int pl          = state[OFS_FSMPLAYER+fsmlevel];
+		int i,j;
+        ArrayList<Integer> actionTypes = new ArrayList<>();
+		ArrayList<int[]> roadOptions = new ArrayList<>();
+		ArrayList<int[]> settlementOptions = new ArrayList<>();
+		ArrayList<int[]> cityOptions = new ArrayList<>();
+		ArrayList<int[]> buyCardOptions = new ArrayList<>();
+		ArrayList<int[]> portTradeOptions = new ArrayList<>();
+        
+        //can always end turn in the normal state
+		actionTypes.add(A_ENDTURN);
+		
+		int[] playersWithResources = new int[NPLAYERS];
+		for (i = 0; i < NPLAYERS; i++) {
+			for (j = 0; j < NRESOURCES; j++)
+				playersWithResources[i] += state[OFS_PLAYERDATA[i] + OFS_RESOURCES + j];
+				
+		}
+		//are there any other players with rss
+		ArrayList<Integer> oppWithRss = new ArrayList<>();
+		for (i = 0; i < NPLAYERS; i++) {
+			if(i==pl)
+				continue;
+			if(playersWithResources[i] > 0)
+				oppWithRss.add(i);
+		}
+		
+		if(playersWithResources[pl] > 0){
+			//can only do trades if any of the opponents have resources
+			if(oppWithRss.size() != 0)
+				actionTypes.add(A_TRADE);
+			listPaidRoadPossibilities(roadOptions);
+			listPaidSettlementPossibilities(settlementOptions);
+			listCityPossibilities(cityOptions);
+			listBuyDevCardPossibility(buyCardOptions);
+			listBankTradePossibilities(portTradeOptions);
+			
+			if(roadOptions.size() > 0){
+				actionTypes.add(A_BUILDROAD);
+			}
+			if(settlementOptions.size() > 0){
+				actionTypes.add(A_BUILDSETTLEMENT);
+			}
+			if(cityOptions.size() > 0){
+				actionTypes.add(A_BUILDCITY);
+			}
+			if(buyCardOptions.size() > 0){
+				actionTypes.add(A_BUYCARD);
+			}
+			if(portTradeOptions.size() > 0){
+				actionTypes.add(A_PORTTRADE);
+			}
+		}
+		
+		if (state[OFS_PLAYERDATA[pl] + OFS_HASPLAYEDCARD] == 0){
+			if (state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_KNIGHT] >= 1)
+				actionTypes.add(A_PLAYCARD_KNIGHT);
+			if (state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_MONOPOLY] >= 1)
+				actionTypes.add(A_PLAYCARD_MONOPOLY);
+			if (state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_FREERESOURCE] >= 1)
+				actionTypes.add(A_PLAYCARD_FREERESOURCE);
+			if ((state[OFS_PLAYERDATA[pl] + OFS_OLDCARDS + CARD_FREEROAD] >= 1)
+					&& (state[OFS_PLAYERDATA[pl] + OFS_NROADS] < 15)) {
+				// need to check if the player can place roads first
+				ArrayList<int[]> roadOpt = new ArrayList<int[]>();
+				listRoadPossibilities(roadOpt);
+				if (roadOpt.size() > 0)
+					actionTypes.add(A_PLAYCARD_FREEROAD);
+			}
+		}
+		return actionTypes;
+	}
+	
 	
 	private void listPaidRoadPossibilities(ArrayList<int[]> options){
 		int fsmlevel    = state[OFS_FSMLEVEL];
@@ -1169,7 +1296,6 @@ public class Catan implements Game, GameStateConstants {
 				continue;
 			if (i == state[OFS_ROBBERPLACE])
 				continue;
-			// !!!!! bl.possibilities.addAction(A_PLACEROBBER, i, -1);
 			Arrays.fill(adjacentPlayers, false);// clear adjacent array
 			for (j = 0; j < 6; j++) {
 				ind = board.neighborHexVertex[i][j];
@@ -1205,24 +1331,41 @@ public class Catan implements Game, GameStateConstants {
 		int fsmlevel = state[OFS_FSMLEVEL];
 		int pl = state[OFS_FSMPLAYER + fsmlevel];
 		int val = 0;
-		for (int i = 0; i < NRESOURCES; i++)
+		int ind = 0;
+		int i =0;
+		for (i = 0; i < NRESOURCES; i++)
 			val += state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i];
 		val = val / 2;
-		if(sample)
-			options.add(Actions.newAction(A_PAYTAX_RANDOM, val));
-		else if(val <= config.N_MAX_DISCARD){
+		boolean random = false;
+		if(sample) {
+			random = true;
+		}else if(val <= config.N_MAX_DISCARD){
 			//get the resources
 			int[] resources = new int[NRESOURCES];
-			for (int i = 0; i < NRESOURCES; i++)
-				resources[i] = state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i];
-			ResourceSet set = new ResourceSet(resources);
-			List<ResourceSet> discardList = set.getSubsets(val);
+			ResourceSet set = new ResourceSet();
+			for (i = 0; i < NRESOURCES; i++)
+				set.add(state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i], i);
+			List<ResourceSet> discardList = set.getSubsets(val,false);
 			for(ResourceSet opt: discardList){
 				resources = opt.getResourceArrayClone();
-				options.add(Actions.newAction(A_PAYTAX_SPECIFIED, resources[0], resources[1],resources[2], resources[3], resources[4]));
+				options.add(Actions.newAction(A_PAYTAX, resources[0], resources[1],resources[2], resources[3], resources[4]));
 			}
-		}else
-			options.add(Actions.newAction(A_PAYTAX_RANDOM, val));
+		}else {
+			random = true;
+		}
+		
+		if(random) {
+			int[] rssSet = new int[NRESOURCES];
+			for (i = 0; i < NRESOURCES; i++)
+				rssSet[i] = state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + i];
+			int[] action = Actions.newAction(A_PAYTAX);
+			for (i = 0; i < val; i++) {
+				ind = selectRandomResourceFromSet(rssSet);
+				rssSet[ind] --;
+				action[ind + 1] +=1;
+			}
+			options.add(action);
+		}
 	}
 	
 	private void listStealingPossiblities(ArrayList<int[]> options, int victim){
@@ -1268,7 +1411,25 @@ public class Catan implements Game, GameStateConstants {
 	
 	private void listMonopolyPossibilities(ArrayList<int[]> options){
 		for (int i = 0; i < NRESOURCES; i++)
-			options.add(Actions.newAction(A_PLAYCARD_MONOPOLY, i));
+			options.add(Actions.newAction(A_PLAYCARD_MONOPOLY, i, -1,-1,-1,-1));
+	}
+	
+	private void listMonopolyTotals(ArrayList<int[]> options){
+        int fsmlevel    = state[OFS_FSMLEVEL];
+        int pl          = state[OFS_FSMPLAYER+fsmlevel];
+        int choice		= state[OFS_MONO_RSS_CHOICE];
+        
+		int[] action = Actions.newAction(A_CHOOSE_MONO_TOTALS);
+		//include the effects such as what was lost or gained depending on the player number
+		int total = 0;
+		for (int ind = 0; ind<NPLAYERS; ind++){
+			if(ind == pl)
+				continue;
+			total += state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + choice];
+            action[1 + ind] = state[OFS_PLAYERDATA[ind] + OFS_RESOURCES + choice];                    
+        }
+		action[1 + pl] = total;
+		options.add(action);
 	}
 	
 	private void listFreeResourcePossibilities(ArrayList<int[]> options){
@@ -1367,13 +1528,19 @@ public class Catan implements Game, GameStateConstants {
     }
 	
     private void listTradeResponsePossiblities(ArrayList<int[]> options){
-        options.add(Actions.newAction(A_ACCEPT));
+        int fsmlevel    = state[OFS_FSMLEVEL];
+        int pl          = state[OFS_FSMPLAYER+fsmlevel];
+        
+    	//due to sampling from belief, accept may not be possible now because either the player that made the offer or the current player doesn't have the rss
+        if(state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + state[OFS_CURRENT_OFFER + 8]] >= state[OFS_CURRENT_OFFER + 7] && 
+        		state[OFS_PLAYERDATA[pl] + OFS_RESOURCES + state[OFS_CURRENT_OFFER + 10]] >= state[OFS_CURRENT_OFFER + 9] &&
+        		state[OFS_PLAYERDATA[state[OFS_CURRENT_OFFER + 1]] + OFS_RESOURCES + state[OFS_CURRENT_OFFER + 4]] >= state[OFS_CURRENT_OFFER + 3] &&
+        		state[OFS_PLAYERDATA[state[OFS_CURRENT_OFFER + 1]] + OFS_RESOURCES +state[OFS_CURRENT_OFFER + 6]] >= state[OFS_CURRENT_OFFER + 5]) {
+        	options.add(Actions.newAction(A_ACCEPT));
+        }
         options.add(Actions.newAction(A_REJECT));
         if(config.ALLOW_COUNTEROFFERS){
-            int fsmlevel    = state[OFS_FSMLEVEL];
-            int pl          = state[OFS_FSMPLAYER+fsmlevel];
             int pl2 = state[OFS_CURRENT_OFFER + 1];
-        	
             for(int[] trade : Trades.legalTrades){
             	//do we have the resources
             	if(trade[0] <= state[OFS_PLAYERDATA[pl]+OFS_RESOURCES+trade[1]] && trade[2] <= state[OFS_PLAYERDATA[pl]+OFS_RESOURCES+trade[3]]){
@@ -1389,6 +1556,26 @@ public class Catan implements Game, GameStateConstants {
     
 	// other utility methods //
     
+	private int selectRandomResourceFromSet(int[] rss) {
+		int i;
+		double ind;
+		double ncards = 0;
+		ThreadLocalRandom rnd = ThreadLocalRandom.current();
+		for (i = 0; i < NRESOURCES; i++)
+			ncards += rss[i];
+		if (ncards <= 0) {
+			System.err.println("Player has " + ncards + " cards");
+			return -1;
+		}
+		ind = rnd.nextDouble(ncards);
+		for (i = 0; i < NRESOURCES; i++) {
+			ind -= rss[i];
+			if (ind <= 0.0d)
+				return i;
+		}
+		return Math.min(i, NRESOURCES - 1);
+	}
+  
 	private int selectRandomResourceInHand(int pl) {
 		int i, ind, j;
 		int ncards = 0;
@@ -1678,7 +1865,37 @@ public class Catan implements Game, GameStateConstants {
 	
 	public void gameTick(){
 		int[] action = sampleNextAction();
-		performAction(action);
+		performAction(action, true);
+	}
+
+	public static void main(String[] args) {
+		Timer t = new Timer();
+		long d = 0;
+		double b = 0;
+		int nGames = 10000;
+		for(int i =0; i < nGames; i++) {
+			board.InitBoard();// a new board every game to test more scenarios, but in this case the timing may be misleading
+			CatanConfig config = new CatanConfig();
+			Catan game = new Catan(config);
+			while(!game.isTerminal()) {
+				game.gameTick();
+			}
+			d += depth;
+			b += (double)breadth/depth;
+			breadth = 0;
+			depth = 0;
+			if(game.getWinner() == -1)
+				System.err.println("winner not recorded correctly");
+			if(i % 10000 == 0)
+				System.out.println();
+			if(i % 100 == 0)
+				System.out.print(".");
+		}
+		System.out.println(t.elapsed());
+		System.out.println("Done");
+		System.out.println("Done");
+		System.out.println("Depth: " + (double)d/nGames);
+		System.out.println("branch: " + (double)b/nGames);
 	}
 
 }

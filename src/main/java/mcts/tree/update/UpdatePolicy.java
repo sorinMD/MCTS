@@ -7,8 +7,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 
-import mcts.game.Game;
-import mcts.tree.node.TreeNode;
+import mcts.utils.Selection;
 
 /**
  * A utility for updating the tree nodes following a rollout result.
@@ -24,7 +23,8 @@ property = "type")
 	@Type(value = ActionUpdater.class),
 })
 public abstract class UpdatePolicy {
-
-	public abstract void update(ArrayList<TreeNode> visited, Game game);
+	public boolean expectedReturn = false;
+	public boolean everyVisit = false;
 	
+	public abstract void update(ArrayList<Selection> visited, double[] reward, int nRollouts);
 }

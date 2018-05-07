@@ -1,5 +1,6 @@
 package mcts.seeder;
 
+import mcts.game.GameFactory;
 import mcts.tree.node.TreeNode;
 
 /**
@@ -11,7 +12,7 @@ import mcts.tree.node.TreeNode;
 public class NullSeedTrigger extends SeedTrigger{
 
 	@Override
-	public void addNode(TreeNode node) {
+	public void addNode(TreeNode node, GameFactory gameFactory) {
 		// do nothing
 	}
 

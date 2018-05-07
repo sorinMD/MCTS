@@ -24,9 +24,11 @@ import mcts.game.GameConfig;
 import mcts.game.GameFactory;
 import mcts.game.catan.Catan;
 import mcts.game.catan.CatanConfig;
+import mcts.game.catan.belief.CatanFactoredBelief;
 import mcts.listeners.IterationListener;
 import mcts.listeners.SearchListener;
 import mcts.listeners.TimeListener;
+import mcts.listeners.TimedIterationListener;
 import mcts.tree.ExpansionPolicy;
 import mcts.tree.Tree;
 import mcts.utils.PriorityRunnableComparator;
@@ -49,10 +51,11 @@ public class MCTS {
 	
 	public MCTS(MCTSConfig config, GameFactory gameFactory, Game state) {
 		config.selfCheck();
+		gameFactory.getConfig().selfCheck(config);
 		this.config = config;
-		tree = new Tree(state,config.treeSize);
+		tree = new Tree(state, config.treeSize);
         execService = new ThreadPoolExecutor(config.nThreads,config.nThreads, 0L, TimeUnit.MILLISECONDS,
-                new PriorityBlockingQueue<Runnable>(config.nRollouts, new PriorityRunnableComparator()));
+                new PriorityBlockingQueue<Runnable>(config.nIterations, new PriorityRunnableComparator()));
 		t = new Timer();
 		this.gameFactory = gameFactory;
 		this.config.trigger.init(this);
@@ -60,18 +63,19 @@ public class MCTS {
 	
 	public MCTS(MCTSConfig config, GameFactory gameFactory) {
 		config.selfCheck();
+		gameFactory.getConfig().selfCheck(config);
 		this.config = config;
         execService = new ThreadPoolExecutor(config.nThreads,config.nThreads, 0L, TimeUnit.MILLISECONDS,
-                new PriorityBlockingQueue<Runnable>(config.nRollouts, new PriorityRunnableComparator()));
+                new PriorityBlockingQueue<Runnable>(config.nIterations, new PriorityRunnableComparator()));
         t = new Timer();
         this.gameFactory = gameFactory;
         this.config.trigger.init(this);
 	}
 	
 	public void newTree(Game rootState){
-		tree = new Tree(rootState,config.treeSize);
+		tree = new Tree(rootState, config.treeSize);
 		//the below should avoid nullpointers if none of the rollouts finish in the allocated budget
-		ExpansionPolicy.expand(tree, tree.getRoot(), config.trigger, gameFactory);
+		ExpansionPolicy.expand(tree, tree.getRoot(), config.trigger, gameFactory.copy(), null, config.nRootActProbSmoothing);
 	}
 	
 	/**
@@ -95,8 +99,9 @@ public class MCTS {
 			System.out.println("Incorrect number of parameters specified, running with default values on Catan game.");
 		}
 		//uncommment to save configuration
-//        writeJSON(mctsConf, gameConf);
-		GameFactory gf = new GameFactory(gameConf);
+        writeJSON(mctsConf, gameConf);
+		GameFactory gf = new GameFactory(gameConf, null);
+//		GameFactory gf = new GameFactory(gameConf, new CatanFactoredBelief(4));
 		MCTS mcts = new MCTS(mctsConf, gf);
         
 		long overallTime = 0;
@@ -133,12 +138,20 @@ public class MCTS {
 	public SearchListener search(){
 		if(config.timeLimit==0)
 			listener = new IterationListener(this);
+//			listener = new TimedIterationListener(this); //replace the above with this line to time the agent
 		else{
 			listener = new TimeListener(this);
 		}
 		t.reset();
-		for(int i = 0; i <config.nRollouts; i++){
-			execService.execute(new MCTSAgent(tree, listener, config.trigger, config.selectionPolicy, config.updatePolicy, gameFactory, config.maxDepth));
+		//TODO: create a factory for each type of agent would be nicer than having this check here
+		if(config.pomcp) {
+			for(int i = 0; i <config.nIterations; i++){
+				execService.execute(new POMCPAgent(tree, listener, config, gameFactory));
+			}
+		}else {
+			for(int i = 0; i <config.nIterations; i++){
+				execService.execute(new MCTSAgent(tree, listener, config, gameFactory));
+			}
 		}
 		return listener;
 	}
@@ -148,7 +161,7 @@ public class MCTS {
 		config.trigger.cleanUp();
 		if(restart)
 	        execService = new ThreadPoolExecutor(config.nThreads,config.nThreads, 0L, TimeUnit.MILLISECONDS,
-	                new PriorityBlockingQueue<Runnable>(config.nRollouts, new PriorityRunnableComparator()));
+	                new PriorityBlockingQueue<Runnable>(config.nIterations, new PriorityRunnableComparator()));
 	}
 	
 	public void execute(Runnable r){
@@ -156,7 +169,7 @@ public class MCTS {
 	}
 	
 	public int getNSimulations(){
-		return config.nRollouts;
+		return config.nIterations;
 	}
 	
 	public int getNextActionIndex(){
@@ -172,7 +185,7 @@ public class MCTS {
 	 * @return
 	 */
 	public ArrayList<int[]> getOrderedActionList(){
-		ArrayList<int[]> actions = gameFactory.getGame(tree.getRoot().getState()).listPossiblities(false);
+		ArrayList<int[]> actions = gameFactory.getGame(tree.getRoot().getState()).listPossiblities(false).getOptions();
 		double[] values = config.selectionPolicy.getChildrenValues(tree);
 		if(values.length != actions.size()){
 			throw new RuntimeException("root game state options size is different to root node children size");
@@ -197,7 +210,7 @@ public class MCTS {
 		st.sorted(Map.Entry.comparingByValue()).forEachOrdered(e -> result.put(e.getKey(), e.getValue()));
 		return result;
 	}
-	
+		
 	public GameFactory getGameFactory(){
 		return gameFactory;
 	}
@@ -224,6 +237,19 @@ public class MCTS {
 		ObjectMapper mapper = new ObjectMapper();
 		GameConfig conf = mapper.readValue(new File(path), GameConfig.class);
 		return conf;
+	}
+	
+	public MCTSConfig getMCTSConfig() {
+		return config;
+	}
+	
+	/**
+	 * This is a very unsafe method!!! But it is unfortunately needed for loading a game in StacSettlers project.
+	 * TODO: find a better way to handle this, in the meantime do not use it for anything else!
+	 * @param newFac
+	 */
+	public void setGameFactory(GameFactory newFac) {
+		gameFactory = newFac;
 	}
 	
 	

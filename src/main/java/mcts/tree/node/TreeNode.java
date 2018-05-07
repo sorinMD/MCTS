@@ -1,7 +1,6 @@
 package mcts.tree.node;
 
 import java.util.Arrays;
-import java.util.Random;
 
 import mcts.game.GameFactory;
 
@@ -15,26 +14,33 @@ import mcts.game.GameFactory;
 public abstract class TreeNode {
 
 	private final int[] state;
+	private final int[] belief;
 	
 	int nVisits;
-    int[] wins;
+    double[] wins;
 	int vLoss;
 	private final int currentPlayer;
 	private boolean leaf = true;
 	private final boolean terminal;
+	/**
+	 * Field required for ISMCTS way of computing parentVisits when this node was legal
+	 */
+	private int parentVisits;
 	
 	/**
 	 * Flag set when an external evaluation metric is used for seeding.
 	 */
 	private boolean evaluated = false;
 	
-	public TreeNode(int[] state, boolean terminal, int cpn) {
+	public TreeNode(int[] state, int[] belief, boolean terminal, int cpn) {
 	    this.state = state;
+	    this.belief = belief;
 		this.terminal = terminal;
 		currentPlayer = cpn;
 		vLoss = 0;
 		nVisits = 0;
-	    wins = new int[GameFactory.nMaxPlayers()]; //TODO: find a way to set this value depending on the current game
+		parentVisits = 0;
+	    wins = new double[GameFactory.nMaxPlayers()]; //TODO: find a way to set this value depending on the current game
 	}
 	
 	public int getCurrentPlayer(){
@@ -61,7 +67,7 @@ public abstract class TreeNode {
 	}
 	
 	public Key getKey(){
-		return new Key(state);
+		return new Key(state, belief);
 	}
 	
 	/**
@@ -71,22 +77,22 @@ public abstract class TreeNode {
 	 * initial tests indicate this is a negligible increase, while it is
 	 * beneficial to synchronise the updates so that no results are lost
 	 */
-	public synchronized void update(int winner) {
-		if (winner != -1) {
-			wins[winner]++;
-		} else {
-			/*
-			 * this means everyone lost or the game hasn't finished yet (it
-			 * could happen in Catan if roll-outs are too long, probably caused
-			 * by no more legal building locations available on the board)
-			 */
-			System.err.println("WARNING: Possibly updating with results from a game that was not finished");
-		}
-		nVisits++;
+	public synchronized void update(double[] reward, int nRollouts) {
+		for(int i = 0; i < wins.length; i++)	
+			wins[i]+=reward[i];
+		nVisits+=nRollouts;
 		vLoss = 0;
 	}
 	
-	public int getWins(int pn) {
+	public int getParentVisits() {
+		return parentVisits;
+	}
+	
+	public void incrementParentVisits() {
+		parentVisits++;
+	}
+	
+	public double getWins(int pn) {
 		return wins[pn];
 	}
 	

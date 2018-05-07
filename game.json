@@ -4,7 +4,19 @@
   "TRADES" : true,
   "NEGOTIATIONS" : true,
   "ALLOW_COUNTEROFFERS" : false,
-  "N_MAX_DISCARD" : 10,
-  "EVEN_DISTRIBUTION_OVER_TYPES" : true,
-  "ALLOW_SAMPLING_IN_NORMAL_STATE" : false
+  "N_MAX_DISCARD" : 8,
+  "N_MAX_RSS_STEAL" : 15,
+  "OBS_DISCARDS_IN_ROLLOUTS" : false,
+  "SAMPLE_FROM_DISTRIBUTION_OVER_TYPES_IN_ROLLOUTS" : true,
+  "OFFERS_LIMIT" : 2147483647,
+  "ALLOW_SAMPLING_IN_NORMAL_STATE" : false,
+  "ABSTRACT_BELIEF" : false,
+  "UNIFORM_BELIEF_CHANCE_EVENTS" : false,
+  "LIST_POMS" : false,
+  "OBSERVABLE_POM_EFFECTS" : false,
+  "ENFORCE_UNIFORM_TYPE_DIST_IN_BELIEF_ROLLOUTS" : false,
+  "rolloutTypeDist" : {
+    "type" : "mcts.game.catan.typepdf.UniformActionTypePdf"
+  },
+  "OBSERVABLE_VPS" : false
 }

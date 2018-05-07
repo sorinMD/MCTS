@@ -16,9 +16,19 @@ import mcts.game.GameFactory;
 public class StandardNode extends TreeNode{
 	
 	private ArrayList<Key> children;
+	/**
+	 * The possible actions.
+	 */
+	private ArrayList<int[]> actions;
+	
+	/**
+	 * The probabilities of actions to be legal.
+	 */
+	private ArrayList<Double> actionProbs;
+	
 	//stats on actions required if afterstates are not used
 	public int[] childVisits;
-	public int[][] wins;
+	public double[][] wins;
 	public int[] vloss;
 	
 	/**
@@ -28,27 +38,29 @@ public class StandardNode extends TreeNode{
 	 */
 	public AtomicDoubleArray  pValue;
 	
-	public StandardNode(int[] state, boolean terminal, int cpn) {
-		super(state, terminal, cpn);
+	public StandardNode(int[] state, int[] belief, boolean terminal, int cpn) {
+		super(state, belief, terminal, cpn);
 	}
 	
 	/**
 	 * Adds the edges to the node.
 	 * @param children
 	 */
-	public synchronized void addChildren(ArrayList<Key> children){
+	public synchronized void addChildren(ArrayList<Key> children, ArrayList<int[]> acts, ArrayList<Double> actionProbs){
 		if(!isLeaf())
 			return;
+		this.actions = acts;
 		this.children = children;
+		this.actionProbs = actionProbs;
 		//initialise the pValue with a uniform distribution
 		double[] dist = new double[children.size()];
 		Arrays.fill(dist, 1.0/children.size());
 		pValue = new AtomicDoubleArray(dist);
 		//stats on actions required only if afterstates are not used
 		childVisits = new int[children.size()];
-		wins = new int[GameFactory.nMaxPlayers()][];
+		wins = new double[GameFactory.nMaxPlayers()][];
 		for(int i = 0; i < GameFactory.nMaxPlayers(); i++){
-			wins[i] = new int[children.size()];
+			wins[i] = new double[children.size()];
 		}
 		vloss = new int[children.size()];
 		setLeaf(false);
@@ -58,35 +70,36 @@ public class StandardNode extends TreeNode{
 		return this.children;
 	}
 	
+	public ArrayList<int[]> getActions(){
+		return this.actions;
+	}
+	
+	public ArrayList<Double> getActionProbs(){
+		return this.actionProbs;
+	}
+	
 	public boolean canExpand(){
 		return true;
 	}
 	
 	/**
 	 * Used only if afterstates are not used, otherwise use the standard state update
-	 * @param winner
+	 * @param reward
 	 * @param k
+	 * @param nRollouts
 	 */
-	public synchronized void update(int winner, Key k) {
+	public synchronized void update(double[] reward, Key k, int nRollouts) {
 		if(k != null)
 		for(int idx = 0; idx < children.size(); idx++){
 			if(children.get(idx).equals(k)){
-				if (winner != -1) {
-					wins[winner][idx]++;
-				}else {
-		 			/*
-		 			 * this means everyone lost or the game hasn't finished yet (it
-		 			 * could happen in Catan if roll-outs are too long, probably caused
-		 			 * by no more legal building locations available on the board)
-		 			 */
-		 			System.err.println("WARNING: Possibly updating with results from a game that was not finished");
-				}
+				for(int i =0; i < wins.length; i++)
+					wins[i][idx]+=reward[i];
 				vloss[idx] = 0;
-				childVisits[idx]++;
+				childVisits[idx]+=nRollouts;
 				break;
 			}
 		}
-		nVisits++;
+		nVisits+=nRollouts;
 	}
 	
 }

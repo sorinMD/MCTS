@@ -1,20 +1,25 @@
 package mcts.listeners;
 
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import mcts.MCTS;
+import mcts.utils.Timer;
 
 /**
- * Iteration listener
+ * Iteration listener which also times how long it takes to run MCTS.
  * 
  * @author sorinMD
  *
  */
-public class IterationListener implements SearchListener{
+public class TimedIterationListener implements SearchListener{
 
 	private AtomicInteger counter = new AtomicInteger(0);
 	private MCTS mcts;
+	public Timer timer = new Timer();
+	public static ArrayList<Long> times = new ArrayList<>();
 	
-	public IterationListener(MCTS mcts) {
+	public TimedIterationListener(MCTS mcts) {
 		this.mcts = mcts;
 	}
 	
@@ -23,6 +28,7 @@ public class IterationListener implements SearchListener{
 	}
 	
 	public void waitForFinish(){
+		timer.reset();
 		synchronized (mcts) {
 			try {
 				mcts.wait();
@@ -34,6 +40,7 @@ public class IterationListener implements SearchListener{
 	
 	public void increment(){
 		if(counter.incrementAndGet() == mcts.getNSimulations()){
+			times.add(timer.elapsed());
 			synchronized (mcts) {
 				mcts.shutdownNow(true);
 				mcts.notify();

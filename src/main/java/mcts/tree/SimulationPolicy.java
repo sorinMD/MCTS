@@ -1,12 +1,6 @@
 package mcts.tree;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
-
 import mcts.game.Game;
-import mcts.game.catan.GameStateConstants;
 
 /**
  * A utility for playing the game following a policy until max depth or a
@@ -17,17 +11,21 @@ import mcts.game.catan.GameStateConstants;
  */
 public class SimulationPolicy {
 	private static int maxDepth = 100000;
-	public static void simulate(Game g){
+	/**
+	 * Run the rollout policy to the end of the game
+	 * @param state
+	 * @return the game in the final state
+	 */
+	public static Game simulate(Game game){
 		int depth = 0;
-		while(!g.isTerminal()){
-			ThreadLocalRandom r = ThreadLocalRandom.current();
-			ArrayList<int[]> actions = g.listPossiblities(true);
+		while(!game.isTerminal()){
 			depth++;
-			g.performAction(actions.get(r.nextInt(actions.size())));
+			game.gameTick();
 			if(depth > maxDepth){
 				System.err.println("WARNING: rollout reached max depth!!!");
 				break;
 			}
 		}
+		return game;
 	}
 }

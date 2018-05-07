@@ -24,6 +24,7 @@ import mcts.game.catan.CatanConfig;
 import mcts.game.catan.GameStateConstants;
 import mcts.listeners.IterationListener;
 import mcts.listeners.SearchListener;
+import mcts.utils.Options;
 import mcts.utils.Timer;
 
 /**
@@ -46,7 +47,7 @@ public class AppFrame extends javax.swing.JFrame implements GameStateConstants {
         //set the size according to the size of the jframe
         settlersPanel1.setBoardLayoutSize();
         Catan.initBoard();
-        gameFactory = new GameFactory(new CatanConfig());
+        gameFactory = new GameFactory(new CatanConfig(), null);
         boardlayout = (Catan) gameFactory.getNewGame();//new BoardLayout(settlersPanel1.getWidth(),settlersPanel1.getHeight());
         settlersPanel1.SetBoardLayout(boardlayout);
         
@@ -360,16 +361,16 @@ public class AppFrame extends javax.swing.JFrame implements GameStateConstants {
     }//GEN-LAST:event_jButton5ActionPerformed
 
     private void jButton6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton6ActionPerformed
-    	GameFactory gameFactory = new GameFactory(new CatanConfig());
+    	GameFactory gameFactory = new GameFactory(new CatanConfig(), null);
     	MCTS mcts = new MCTS(new MCTSConfig(), gameFactory, boardlayout.copy());
     	//TODO: find a better approach to wait for the tree to finish...
     	SearchListener listener = mcts.search();
     	listener.waitForFinish();
     	int idx = mcts.getNextActionIndex();
-    	ArrayList<int[]> options = boardlayout.listPossiblities(false);//list all options
+    	Options options = boardlayout.listPossiblities(false);//list all options
     	System.out.println("State: " + Arrays.toString(boardlayout.getState()));
-    	System.out.println("Action chosen: " + Arrays.toString(options.get(idx)));
-    	boardlayout.performAction(options.get(idx));
+    	System.out.println("Action chosen: " + Arrays.toString(options.getOptions().get(idx)));
+    	boardlayout.performAction(options.getOptions().get(idx),false);
     	settlersPanel1.repaint(); 
     }//GEN-LAST:event_jButton6ActionPerformed
 

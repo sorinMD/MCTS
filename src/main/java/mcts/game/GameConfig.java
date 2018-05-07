@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonSubTypes.Type;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 
+import mcts.MCTSConfig;
 import mcts.game.catan.CatanConfig;
 import mcts.game.tictactoe.TicTacToeConfig;
 
@@ -24,5 +25,17 @@ property = "type")
 })
 public abstract class GameConfig {
 	public int id;
-
+	
+	/**
+	 * @return a deep copy of the object
+	 */
+	protected abstract GameConfig copy();
+	
+	/**
+	 * Checks the current configuration for known mismatches between parameters.
+	 * Also checks against the MCTS configuration and updates any of the missing parameters.
+	 * @param config the configuration of the MCTS algorithm that will use the game model with this configuration.
+	 */
+	public abstract void selfCheck(MCTSConfig config);
+	
 }
